@@ -63,9 +63,9 @@ export default function HomePage() {
               </div>
 
               {/* Main Content Grid */}
-              <div className="grid gap-6 lg:grid-cols-3">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
                 {/* Today's Schedule */}
-                <Card className="lg:col-span-2">
+                <Card className="md:col-span-2">
                   <CardHeader>
                     <CardTitle>今日のスケジュール</CardTitle>
                     <CardDescription>2024年12月27日（金）</CardDescription>
