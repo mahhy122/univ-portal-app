@@ -8,9 +8,9 @@ export interface SyllabusItem{
   grade: string;
   category: string;
   url: string;
-  
   numberingCode: string;
 }
+
 export type ScrapeError = {
   tag: "ScaperError";
   cause: string;

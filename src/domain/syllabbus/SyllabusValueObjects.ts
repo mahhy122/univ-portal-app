@@ -2,7 +2,7 @@ import { Result, err, ok } from "neverthrow"
 import { Brand, TaggedError } from "@/lib/types"
 
 export type LectureName = Brand<"LectureName", string>
-export const LecutureName = {
+export const LectureName = {
   fromString(name: string): Result<LectureName, TaggedError<"InvalidLectureName", string>> {
     if (name.length === 0) {
       return err({
@@ -26,7 +26,7 @@ export const SyllabusItemID = {
   }
 }
 
-exprot type LectureYear = Brand<"LectureYear", number>
+export type LectureYear = Brand<"LectureYear", number>
 export const LectureYear = {
   fromNumber(year: number): Result<LectureYear, TaggedError<"InvalidLectureYear", string>> {
     if (year < 2000 || year > 2100) {
@@ -39,7 +39,7 @@ export const LectureYear = {
   }
 }
 
-exprot type LectureSemester = Brand<"LectureSemester", "前期" | "後期" | "通年">
+export type LectureSemester = Brand<"LectureSemester", "前期" | "後期" | "通年">
 export const LectureSemester = {
   fromString(semester: string): Result<LectureSemester, TaggedError<"InvalidLectureSemester", string>> {
     if (semester !== "前期" && semester !== "後期" && semester !== "通年") {
@@ -52,7 +52,7 @@ export const LectureSemester = {
   }
 }
 
-exprot type SyllabusURL = Brand<"SyllabusURL", string>
+export type SyllabusURL = Brand<"SyllabusURL", string>
 export const SyllabusURL = {
   fromString(url: string): Result<SyllabusURL, TaggedError<"InvalidSyllabusURL", string>> {
     try {
@@ -66,7 +66,7 @@ export const SyllabusURL = {
     return ok(url as SyllabusURL)
   }
 }
-exprot type SyllabusNumberingCode = Brand<"SyllabusNumberingCode", string>
+export type SyllabusNumberingCode = Brand<"SyllabusNumberingCode", string>
 export const SyllabusNumberingCode = {
   fromString(code: string): Result<SyllabusNumberingCode, TaggedError<"InvalidSyllabusNumberingCode", string>> {
     if (code.length === 0) {
