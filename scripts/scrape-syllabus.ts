@@ -59,7 +59,7 @@ const parseSyllabusPage = (html: string, url: string) => {
 
 //メイン実行関数
 const run = async () => {
-  console.log("🚀 スクレイピングを開始します...");
+  console.log("スクレイピングを開始します...");
   const syllabusResults: Lecture["props"][] = [];
 
   try {
@@ -83,7 +83,7 @@ const run = async () => {
     const indexDom = new JSDOM(indexHtml);
     const syllabusLinks = Array.from(indexDom.window.document.querySelectorAll("td > a[href]"));
 
-    console.log(`🔍 ${syllabusLinks.length}件の講義を解析中...`);
+    console.log(`${syllabusLinks.length}件の講義を解析中...`);
 
     for (const link of syllabusLinks.slice(0, 10)) { // テスト用に10件に制限
       const href = link.getAttribute("href")!.replace(/^(\.\.\/)+/, "");
@@ -96,11 +96,11 @@ const run = async () => {
         // --- neverthrow の Result 型を正しく扱う (matchを使用) ---
         lectureResult.match(
           (lecture) => {
-            console.log(`✅ 成功: ${lecture.props.name}`); // 修正: プロパティアクセス
+            console.log(`成功: ${lecture.props.name}`); // 修正: プロパティアクセス
             syllabusResults.push(lecture.props);
           },
           (err) => {
-            console.warn(`⚠️ 解析失敗 (${detailUrl}):`, err.cause.map(e => e.field).join(", "));
+            console.warn(`失敗 (${detailUrl}):`, err.cause.map(e => e.field).join(", "));
           }
         );
       }
