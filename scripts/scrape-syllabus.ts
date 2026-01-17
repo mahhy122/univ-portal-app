@@ -2,80 +2,120 @@ import { JSDOM } from "jsdom";
 import fetch from "node-fetch";
 import fs from "fs";
 import path from "path";
+import { LectureFactory } from "../src/domain/syllabus/LectureFactory";
+import { Lecture } from "../src/domain/syllabus/Lecture";
 
+// --- 定数とユーティリティの定義 (エラー解消用) ---
 const YEAR = 2025;
 const BASE_URL = `https://syllabus.u-hyogo.ac.jp/slResult/${YEAR}/japanese/`;
 
+
+//指定したURLのHTMLを取得する関数
 const fetchData = async (url: string): Promise<string> => {
   const res = await fetch(url);
+  if (!res.ok) throw new Error(`Fetch failed: ${res.statusText}`);
   return await res.text();
 };
 
+//講義詳細ページの解析
+
 const parseSyllabusPage = (html: string, url: string) => {
-  const dom = new JSDOM(html);
-  const doc = dom.window.document;
-  const getT = (s: string) => doc.querySelector(s)?.textContent?.trim() || "";
-
-  // index.ts のセレクタ
-  const name = getT("#wrap > div.page-body > table > tbody > tr > td.syllabus-info > div > div:nth-child(1) > div:nth-child(2) > div");
-  if (!name) return null;
-
-  return {
-    name,
-    numberingCode: getT("#wrap > div.page-body > table > tbody > tr > td.syllabus-info > div > div:nth-child(4) > div:nth-child(2) > div"),
-    teacher: getT("td.side_box div:nth-child(2)").replace("教員名 ： ", ""),
-    url
+  const doc = new JSDOM(html).window.document;
+  const area = doc.querySelector(".syllabusArea");
+  if (!area) return null;
+  const getValueByLabel = (label: string): string => {
+    const headers = Array.from(area.querySelectorAll(".colHeader"));
+    const target = headers.find(h => h.textContent?.trim() === label);
+    // ラベルの次の要素を取得
+    return target?.nextElementSibling?.textContent?.trim() || "";
   };
+  // DOMツリー解析に基づいた生データの抽出
+  const rawName = getValueByLabel("授業科目名");
+  const rawCategory = getValueByLabel("科目区分");
+  const rawGrade = getValueByLabel("学年");
+  const rawNumbering = getValueByLabel("ﾅﾝﾊﾞﾘﾝｸﾞｺｰﾄﾞ");
+  const rawUnitsStr = getValueByLabel("単位数");
+  const rawYearSemester = getValueByLabel("開講時期");
+  const rawTeacher = getValueByLabel("担当教員");
+  // データの加工
+  const yearNum = parseInt(rawYearSemester.split("年度")[0]) || YEAR;
+  const semesterStr = rawYearSemester.split("年度")[1] || "";
+  const unitsNum = parseFloat(rawUnitsStr.replace("単位", "")) || 0;
+
+  // Factoryによるバリデーション付き生成
+  return LectureFactory.create({
+    id: rawNumbering,
+    name: rawName,
+    teacher: rawTeacher,
+    year: yearNum,
+    semester: semesterStr,
+    units: unitsNum,
+    gread: rawGrade,
+    category: rawCategory,
+    url: url,
+    numberingCode: rawNumbering
+  });
 };
 
+//メイン実行関数
 const run = async () => {
+  console.log("🚀 スクレイピングを開始します...");
+  const syllabusResults: Lecture["props"][] = [];
+
   try {
-    // 1. 学部リスト取得
+    // 1. 学部リストの取得
     const topHtml = await fetchData(BASE_URL);
     const topDom = new JSDOM(topHtml);
     const facultyLinks = Array.from(topDom.window.document.querySelectorAll("#navi_gakubu a[href]"));
     const facultyUrl = new URL(facultyLinks[3].getAttribute("href")!, BASE_URL).toString();
 
-    // 2. 講義カテゴリリスト取得 (LessonIndexHtml へのリンクを探す)
+    // 2. 講義一覧(LessonIndex)へのリンクを取得
     const catHtml = await fetchData(facultyUrl);
     const catDom = new JSDOM(catHtml);
-    // index.ts のロジック: a[href] のうち "LessonIndexHtml" を含むものを探す
     const catLink = Array.from(catDom.window.document.querySelectorAll("a[href]"))
       .find(a => a.getAttribute("href")?.includes("LessonIndexHtml"));
-
-    if (!catLink) throw new Error("講義一覧(LessonIndex)へのリンクが見つかりません");
     
-    // index.ts の slice(3) 相当の処理
-    const indexHref = catLink.getAttribute("href")!.replace(/^\.\.\//, "");
-    const lessonIndexUrl = new URL(indexHref, BASE_URL).toString();
-    console.log(`📂 講義一覧ページを取得中: ${lessonIndexUrl}`);
+    if (!catLink) throw new Error("LessonIndexが見つかりません");
+    const lessonIndexUrl = new URL(catLink.getAttribute("href")!.replace(/^\.\.\//, ""), BASE_URL).toString();
 
-    // 3. 講義一覧から詳細URLを取得
+    // 3. 各講義の詳細URLを取得
     const indexHtml = await fetchData(lessonIndexUrl);
     const indexDom = new JSDOM(indexHtml);
     const syllabusLinks = Array.from(indexDom.window.document.querySelectorAll("td > a[href]"));
 
-    const results = [];
-    console.log(`🔍 ${syllabusLinks.length}件のリンクを解析します...`);
+    console.log(`🔍 ${syllabusLinks.length}件の講義を解析中...`);
 
-    for (const link of syllabusLinks.slice(0, 5)) {
-      // 詳細ページへのパス解決 (../../slSyllabus/... 対策)
+    for (const link of syllabusLinks.slice(0, 10)) { // テスト用に10件に制限
       const href = link.getAttribute("href")!.replace(/^(\.\.\/)+/, "");
       const detailUrl = new URL(href, BASE_URL).toString();
       
       const detailHtml = await fetchData(detailUrl);
-      const data = parseSyllabusPage(detailHtml, detailUrl);
-      if (data) {
-        console.log(`✅ 取得: ${data.name}`);
-        results.push(data);
+      const lectureResult = parseSyllabusPage(detailHtml, detailUrl);
+      
+      if (lectureResult) {
+        // --- neverthrow の Result 型を正しく扱う (matchを使用) ---
+        lectureResult.match(
+          (lecture) => {
+            console.log(`✅ 成功: ${lecture.props.name}`); // 修正: プロパティアクセス
+            syllabusResults.push(lecture.props);
+          },
+          (err) => {
+            console.warn(`⚠️ 解析失敗 (${detailUrl}):`, err.cause.map(e => e.field).join(", "));
+          }
+        );
       }
     }
 
+    // 4. 保存
     const dir = path.join(process.cwd(), "src/data");
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, "syllabus.json"), JSON.stringify(results, null, 2));
-    console.log("✨ 完了");
-  } catch (e) { console.error(e); }
+    fs.writeFileSync(path.join(dir, "syllabus.json"), JSON.stringify(syllabusResults, null, 2));
+
+    console.log(`✨ 完了！ ${syllabusResults.length}件を保存しました。`);
+
+  } catch (error) {
+    console.error("❌ 重大なエラー:", error);
+  }
 };
 
 run();

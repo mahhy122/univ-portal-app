@@ -1,8 +1,14 @@
 [
   {
+    "id": "IATBL1GCA7",
     "name": "基礎ゼミナール (Ｌ)",
-    "numberingCode": "IATBL1GCA7",
-    "teacher": "",
-    "url": "https://syllabus.u-hyogo.ac.jp/slResult/2025/japanese/syllabusHtml/SyllabusHtml.2025.1.H41.2025.938000.html"
+    "teacher": "日浦 慎作、菊池 祐介、古谷 栄光、上浦 尚武",
+    "year": 2025,
+    "semester": "前期",
+    "units": 2,
+    "gread": "学年指定なし",
+    "category": "全学共通科目",
+    "url": "https://syllabus.u-hyogo.ac.jp/slResult/2025/japanese/syllabusHtml/SyllabusHtml.2025.1.H41.2025.938000.html",
+    "numberingCode": "IATBL1GCA7"
   }
 ]
