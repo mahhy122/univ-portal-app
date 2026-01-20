@@ -1,19 +1,46 @@
 import { Result, success, failure } from "../types"; // 処理結果を表す型と成功/失敗を生成するヘルパーをインポート
 import { Faculty, CourseCategory, Course, SyllabusDetail, UrlString, ScraperError } from "./types"; // スクレイパー固有の型定義をインポート
 
+const extractValidUrl = (element: Element, baseUrl: string): Result<UrlString, ScraperError> => { // 有効なURLを抽出するユーティリティ関数
+  const anchor = element as HTMLAnchorElement; // 要素をアンカー要素としてキャスト
+  const href = anchor.getAttribute("href"); // href属性を取得
+  if (!href){
+    return failure({
+      tag: "ParseError",
+      cause: "リンクのhref属性が存在しないです."
+    });
+  }else if (href.trim() === "") {
+    return failure({
+      tag: "ParseError",
+      cause: "リンクのhref属性が空文字です."
+    });
+  }
+  return success(new URL(href, baseUrl).toString() as UrlString); // 相対URLを絶対URLに変換してUrlString型として返す
+};
+
 export const getFaculties = (doc: Document, baseUrl: string): Result<Faculty[], ScraperError> => { // 学部一覧をDOMから抽出する関数をエクスポート
   const nodes = doc.querySelectorAll("#navi_gakubu a"); // ナビゲーションの学部リンク要素を全て取得
-  if (nodes.length === 0) return failure({ tag: "DomNotFoundError", cause: "学部リンクが見つかりません" }); // 見つからなければ失敗を返す
   
+  const facalties: Faculty[] = Array.from(nodes).reduce((acc: Faculty[], node) => { // 各リンク要素を処理してFacultyオブジェクト配列を生成
+    const urlResult = extractValidUrl(node, baseUrl); // 有効なURLを抽出
+    if (urlResult.ok) { // URL抽出が成功した場合のみ処理を続行
+      const anchor = node as HTMLAnchorElement; // アンカー要素としてキャスト
+      acc.push({
+        name: anchor.textContent?.trim() ?? "名称不明",
+        url: urlResult.value,
+      });
+    }
+    return acc;
+  }, []);
+  if (nodes.length === 0) { // 学部リンクが見つからなかった場合はエラーを返す
+    return failure({
+      tag: "DomNotFoundError",
+      cause: "学部リンクが見つかりません" 
+    });
+  }
 
-  return success(Array.from(nodes).map((node) => { // NodeListを配列に変換して各リンクを処理し、成功結果で返す
-    const anchor = node as HTMLAnchorElement; // 各ノードをアンカー要素として扱うためにキャスト
-    return {
-      name: anchor.textContent?.trim() ?? "名称不明", // アンカーのテキストを取得してトリム、なければデフォルト名
-      url: new URL(anchor.href, baseUrl).toString() as UrlString, // 相対URLをbaseUrlに対して絶対URLへ変換して文字列化
-    };
-  }));
-};
+  return success(facalties);
+}; 
 
 export const getCourseCategories = (doc: Document, baseUrl: string): Result<CourseCategory[], ScraperError> => { // カテゴリ一覧をDOMから抽出する関数
   const nodes = doc.querySelectorAll(".table-index td a"); // テーブルインデックス内のカテゴリリンクを全取得
