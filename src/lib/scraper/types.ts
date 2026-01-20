@@ -11,9 +11,17 @@ export type ScraperError =
   | TaggedError<"FileWriteError", string>;
 // Define data structures for faculties, course categories, courses, and syllabus details
 // 学部、コースカテゴリー、コース、シラバス詳細のデータ構造を定義する
-
 // それぞれのURLはUrlString型として定義される
+
+// Faculty structure
+// 学部の構造
 export interface Faculty {
+  name: string;
+  url: UrlString;
+}
+// Department structure
+// 学科の構造
+export interface Department {
   name: string;
   url: UrlString;
 }
