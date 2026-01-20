@@ -1,5 +1,5 @@
 import { Result, success, failure } from "../types"; // 処理結果を表す型と成功/失敗を生成するヘルパーをインポート
-import { Faculty, CourseCategory, Course, SyllabusDetail, UrlString, ScraperError } from "./types"; // スクレイパー固有の型定義をインポート
+import { Faculty, Department, CourseCategory, Course, SyllabusDetail, UrlString, ScraperError } from "./types"; // スクレイパー固有の型定義をインポート
 
 const extractValidUrl = (element: Element, baseUrl: string): Result<UrlString, ScraperError> => { // 有効なURLを抽出するユーティリティ関数
   const anchor = element as HTMLAnchorElement; // 要素をアンカー要素としてキャスト
@@ -18,29 +18,45 @@ const extractValidUrl = (element: Element, baseUrl: string): Result<UrlString, S
   return success(new URL(href, baseUrl).toString() as UrlString); // 相対URLを絶対URLに変換してUrlString型として返す
 };
 
-export const getFaculties = (doc: Document, baseUrl: string): Result<Faculty[], ScraperError> => { // 学部一覧をDOMから抽出する関数をエクスポート
+export const getFacultiesAndDepartments = (
+  doc: Document,
+  baseUrl: string
+): Result<{ faculties: Faculty[]; departments: Department[] }, ScraperError> => { // 学部一覧をDOMから抽出する関数をエクスポート
   const nodes = doc.querySelectorAll("#navi_gakubu a"); // ナビゲーションの学部リンク要素を全て取得
   
-  const facalties: Faculty[] = Array.from(nodes).reduce((acc: Faculty[], node) => { // 各リンク要素を処理してFacultyオブジェクト配列を生成
+  const initial = {faculties: [] as Faculty[], departments: [] as Department[]}; // 初期値として空の学部・学科配列を用意
+  const result = Array.from(nodes).reduce((acc, node) => { // 各リンク要素を処理してFacultyオブジェクト配列を生成
     const urlResult = extractValidUrl(node, baseUrl); // 有効なURLを抽出
     if (urlResult.ok) { // URL抽出が成功した場合のみ処理を続行
-      const anchor = node as HTMLAnchorElement; // アンカー要素としてキャスト
-      acc.push({
-        name: anchor.textContent?.trim() ?? "名称不明",
-        url: urlResult.value,
-      });
+      const name = node.textContent?.trim(); // テキストを取得してトリム
+      const item = {
+        name,
+        url: urlResult.value
+      }
+      if (name.endsWith("部")) {
+        acc.faculties.push(item);
+      } else if (name.endsWith("科")) {
+        acc.departments.push(item);
+      }
     }
     return acc;
-  }, []);
-  if (nodes.length === 0) { // 学部リンクが見つからなかった場合はエラーを返す
+  }, initial);
+
+  if (result.faculties.length === 0) {
     return failure({
       tag: "DomNotFoundError",
-      cause: "学部リンクが見つかりません" 
+      cause: "学部が見つかりません"
+    });
+  }
+  if (result.departments.length === 0) {
+    return failure({
+      tag: "DomNotFoundError",
+      cause: "学科が見つかりません"
     });
   }
 
-  return success(facalties);
-}; 
+  return success(result);
+};
 
 export const getCourseCategories = (doc: Document, baseUrl: string): Result<CourseCategory[], ScraperError> => { // カテゴリ一覧をDOMから抽出する関数
   const nodes = doc.querySelectorAll(".table-index td a"); // テーブルインデックス内のカテゴリリンクを全取得
