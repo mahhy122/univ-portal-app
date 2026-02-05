@@ -1,13 +1,18 @@
-import { Result, success } from "../../types";
+import { Result, success, failure } from "../../types";
 import { Course, ScraperError } from "../types";
 import { extractValidUrl } from "./utils";
 
-export const getLectures = (
-  doc: Document,
-  baseUrl: string
-): Result<{ lectures: Course[] }, ScraperError> => {
-  // 授業一覧のテーブル行(tr)内のリンクをすべて取得
-  const nodes = doc.querySelectorAll("tr.index_list5 td a, tr.index_list6 td a");
+export const getLectures = (doc: Document, baseUrl: string): Result<{ lectures: Course[] }, ScraperError> => {
+  const selector = ".index_list5 table td a, .index_list6 table td a";
+  const nodes = doc.querySelectorAll(selector);
+
+  // 取得ゼロなら明示的にエラーを返す
+  if (nodes.length === 0) {
+    return failure({
+      tag: "DomNotFoundError",
+      cause: `授業リストが見つかりません。セレクタ: ${selector}`
+    });
+  }
 
   const lectures: Course[] = [];
   for (const node of Array.from(nodes)) {
