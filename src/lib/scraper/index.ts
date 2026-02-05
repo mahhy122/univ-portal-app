@@ -1,115 +1,122 @@
-import { fetchSyllabusDom } from "./client"; // DOM取得用のHTTPクライアント関数をインポート
-import { saveJson } from "./fileWriter"; // JSONファイル保存ユーティリティをインポート
-import { writeErrorLog } from "./logger";
-import { getFacultiesAndDepartments} from "./parsers/faculty"; // ページ解析関数群をインポート
-import { getCourseCategories } from "./parsers/category";
-import { getLectures } from "./parsers/lecture";
-import { getSyllabusDetail } from "./parsers/syllabus"; // 追加：詳細パーサー
-import { CourseCategory, Course } from "./types";
-import { UrlString, Faculty, Department } from "./types"; // URL文字列の型をインポート
+import { fetchSyllabusDom } from "./client"; // DOM取得用
+import { saveJson } from "./fileWriter"; // JSON保存用（自動フォルダ作成機能付き）
+import { writeErrorLog } from "./logger"; // エラーログ用
+import { getFacultiesAndDepartments } from "./parsers/faculty"; // 学部解析
+import { getCourseCategories } from "./parsers/category"; // カテゴリー階層解析
+import { getLectures } from "./parsers/lecture"; // 授業一覧解析
+import { getSyllabusDetail } from "./parsers/syllabus"; // 授業詳細解析
+import { CourseCategory, Course, Faculty, Department, UrlString } from "./types";
 
-const BASE_URL = "https://syllabus.u-hyogo.ac.jp/slResult/2025/japanese/" as UrlString; // スクレイピング開始用のベースURLを型アサーションして定義
+const BASE_URL = "https://syllabus.u-hyogo.ac.jp/slResult/2025/japanese/" as UrlString;
 
 /**
- * 追加：個別の授業詳細（シラバス中身）を取得して保存する関数
+ * 4. 最深部：個別の授業詳細を解析して保存
  */
 const scrapeAndSaveSyllabusDetail = async (course: Course, folderPath: string): Promise<void> => {
-  // 1. シラバス詳細ページのDOMを取得
   const result = await fetchSyllabusDom(course.url);
   if (!result.ok) {
-    await writeErrorLog(result.error, `fetchSyllabusDom (Detail): ${course.name}`);
+    await writeErrorLog(result.error, `詳細取得失敗: ${course.name}`);
     return;
   }
 
-  // 2. 詳細内容を解析（scraping-2のロジックを移植したパーサーを使用）
-  const detailResult = getSyllabusDetail(result.value, course.url);
-  if (!detailResult.ok) {
-    await writeErrorLog(detailResult.error, `getSyllabusDetail: ${course.name}`);
+  // URLも含めて詳細を解析（Result型で安全に！）
+  const detail = getSyllabusDetail(result.value, course.url);
+  if (!detail.ok) {
+    await writeErrorLog(detail.error, `詳細解析失敗: ${course.name}`);
     return;
   }
 
-  // 3. フォルダパス/details/授業名.json として保存
+  // 保存パス: 学部/階層.../details/授業名.json
   const safeTitle = course.name.replace(/[/\\?%*:|"<>]/g, "_");
   const filePath = `${folderPath}/details/${safeTitle}.json`;
 
-  await saveJson(filePath, detailResult.value);
-  console.log(`      └─ [Detail] ${course.name} を保存しました`);
+  await saveJson(filePath, detail.value);
+  console.log(`      └─ [Detail] ${course.name} を保存しました (${filePath})`);
 };
 
 /**
- * 授業一覧をスクレイピングし、さらに詳細ページへドリルダウンする関数
+ * 3. 授業一覧を取得し、各詳細ページへドリルダウン
  */
 const scrapeAndSaveLectures = async (category: CourseCategory, facultyName: string): Promise<void> => {
   const result = await fetchSyllabusDom(category.url);
   if (!result.ok) {
-    await writeErrorLog(result.error, `fetchSyllabusDom: ${category.name}`);
+    await writeErrorLog(result.error, `一覧取得失敗: ${category.name}`);
     return;
   }
 
-  const lectures = getLectures(result.value, category.url);
-  if (!lectures.ok) {
-    // 0件エラーなどがログに詳細に書き出される
-    await writeErrorLog(lectures.error, `getLectures: ${category.name}`);
+  const lecturesResult = getLectures(result.value, category.url);
+  if (!lecturesResult.ok) {
+    await writeErrorLog(lecturesResult.error, `一覧解析失敗: ${category.name}`);
     return;
   }
 
-  // 階層パスの構築
-  const safeFacultyName = facultyName.replace(/[/\\?%*:|"<>]/g, "_");
-  const safePath = category.path.map(p => p.replace(/[/\\?%*:|"<>]/g, "_")).join("/");
-  const folderPath = `${safeFacultyName}/${safePath}`;
-  
-  const fileName = `${folderPath}/3_lectures_${category.name.replace(/[/\\?%*:|"<>]/g, "_")}.json`;
-  
-  await saveJson(fileName, lectures.value);
-  console.log(`    └ ${category.name} を保存しました (${lectures.value.lectures.length}件)`);
+  // フォルダ階層の組み立て
+  const safeFaculty = facultyName.replace(/[/\\?%*:|"<>]/g, "_");
+  const safeHierarchy = category.path.map(p => p.replace(/[/\\?%*:|"<>]/g, "_")).join("/");
+  const folderPath = `${safeFaculty}/${safeHierarchy}`;
+
+  // 授業リスト(JSON)の保存
+  const listFileName = `${folderPath}/3_lectures_${category.name.replace(/[/\\?%*:|"<>]/g, "_")}.json`;
+  await saveJson(listFileName, lecturesResult.value);
+  console.log(`    └ ${category.name} のリストを保存 (${lecturesResult.value.lectures.length}件)`);
+
+  // 各授業の詳細を順番に回るわよ
+  for (const course of lecturesResult.value.lectures) {
+    // サーバーに優しく、0.5秒待機
+    await new Promise(resolve => setTimeout(resolve, 500));
+    await scrapeAndSaveSyllabusDetail(course, folderPath);
+  }
 };
 
+/**
+ * 2. カテゴリー階層（大分類・中分類）を解析
+ */
 const scrapeAndSaveForElement = async (item: Faculty | Department): Promise<void> => {
-  // 1. カテゴリー一覧ページのDOMを取得
-  const cDom = await fetchSyllabusDom(item.url);
-  if (!cDom.ok) {
-    await writeErrorLog(cDom.error, `fetchSyllabusDom: ${item.name} (${item.url})`);
+  const result = await fetchSyllabusDom(item.url);
+  if (!result.ok) {
+    await writeErrorLog(result.error, `カテゴリ取得失敗: ${item.name}`);
     return;
   }
 
-  // 2. カテゴリー一覧を解析（階層パス付き）
-  const categories = getCourseCategories(cDom.value, item.url);
+  const categories = getCourseCategories(result.value, item.url);
   if (!categories.ok) {
-    await writeErrorLog(categories.error, `getCourseCategories: ${item.name}`);
+    await writeErrorLog(categories.error, `カテゴリ解析失敗: ${item.name}`);
     return;
   }
 
-  // 各カテゴリーの授業一覧、およびその詳細を順番に取得
+  // 各カテゴリーをループして授業一覧へ
   for (const category of categories.value.courseCategories) {
     await scrapeAndSaveLectures(category, item.name);
   }
 };
 
-const run = async () => { // 非同期スクレイピング処理のエントリポイントを定義
-  // 学部DOMを取得
-  const fDom = await fetchSyllabusDom(BASE_URL); // ベースURLからDOMを取得して結果を受け取る
+/**
+ * 1. エントリポイント：学部一覧から開始
+ */
+const run = async () => {
+  console.log("スクレイピングを開始します...");
+  
+  const fDom = await fetchSyllabusDom(BASE_URL);
   if (!fDom.ok) {
-    await writeErrorLog(fDom.error, `fetchSyllabusDom(BASE_URL): ${BASE_URL}`);
-    return console.error(fDom.error);
+    await writeErrorLog(fDom.error, "トップページの取得に失敗");
+    return;
   }
 
-  // 学部・学科を解析
-  const facultiesAndDepartments = getFacultiesAndDepartments(fDom.value, BASE_URL); // 取得したDOMから学部一覧を解析する
-  if (!facultiesAndDepartments.ok){ // 解析に失敗したら終了
-    await writeErrorLog(
-      facultiesAndDepartments.error, "学部・学科の解析に失敗しました");
+  const facultiesAndDepartments = getFacultiesAndDepartments(fDom.value, BASE_URL);
+  if (!facultiesAndDepartments.ok) {
+    await writeErrorLog(facultiesAndDepartments.error, "学部一覧の解析失敗");
     return;
   }
   
-  // 学部・学科情報をJSONファイルとして保存
+  // 基礎リストを保存
   await saveJson("faculties/1_faculties_and_departments.json", facultiesAndDepartments.value);
 
-  console.log(`学部: ${facultiesAndDepartments.value.faculties.length}件 を検出しました。処理を開始します。`);
-  
+  // 全学部を順番に処理
   for (const faculty of facultiesAndDepartments.value.faculties) {
-    await scrapeAndSaveForElement(faculty); // 各学部の解析・保存を実行
+    await scrapeAndSaveForElement(faculty);
   }
-  console.log("Scraping completed and files saved."); // 完了メッセージを出力
+  
+  console.log("すべてのデータの保存が完了しました。");
 };
 
-void run(); // エントリポイントを即座に実行（戻り値を無視）
+void run();
