@@ -8,32 +8,9 @@ import { CourseCategory } from "./types";
 import { UrlString,Faculty, Department } from "./types"; // URL文字列の型をインポート
 
 const BASE_URL = "https://syllabus.u-hyogo.ac.jp/slResult/2025/japanese/" as UrlString; // スクレイピング開始用のベースURLを型アサーションして定義
-const scrapeAndSaveForElement = async (item: Faculty | Department): Promise<void> => {
-  const cDom = await fetchSyllabusDom(item.url);
-  if (!cDom.ok) {
-    await writeErrorLog(cDom.error, `fetchSyllabusDom: ${item.name} (${item.url})`);
-    return;
-  }
 
-  const categories = getCourseCategories(cDom.value, item.url);
-  if (!categories.ok) {
-    await writeErrorLog(categories.error, `getCourseCategories: ${item.name}`);
-    return;
-  }
-
-  const fileName = `categories/2_categories_${item.name}.json`.replace(/[/\\?%*:|"<>]/g, (match) => 
-    match === '/' ? '/' : '_'
-  );
-  await saveJson(fileName, categories.value);
-  console.log(`  └ ${item.name} のカテゴリーを保存しました (${categories.value.courseCategories.length}件)`);
-
-  // 各カテゴリーの授業一覧を順番に取得
-  for (const category of categories.value.courseCategories) {
-    await scrapeAndSaveLectures(category);
-  }
-};
-
-const scrapeAndSaveLectures = async (category: CourseCategory): Promise<void> => {
+// 授業一覧をスクレイピングして学部フォルダ内の lectures に保存
+const scrapeAndSaveLectures = async (category: CourseCategory, facultyName: string): Promise<void> => {
   // 1. 授業一覧ページのDOMを取得
   const lDom = await fetchSyllabusDom(category.url);
   if (!lDom.ok) {
@@ -49,11 +26,40 @@ const scrapeAndSaveLectures = async (category: CourseCategory): Promise<void> =>
   }
 
   // 3. lectures フォルダに保存
-  const fileName = `lectures/3_lectures_${category.name}.json`.replace(/[/\\?%*:|"<>]/g, (match) => 
-    match === '/' ? '/' : '_'
-  );
+  // パス形式: 学部名/lectures/3_lectures_カテゴリ名.json
+  const safeFacultyName = facultyName.replace(/[/\\?%*:|"<>]/g, "_");
+  const fileName = `${safeFacultyName}/lectures/3_lectures_${category.name.replace(/[/\\?%*:|"<>]/g, "_")}.json`;
+  
   await saveJson(fileName, lectures.value);
   console.log(`    └ ${category.name} の授業一覧を保存しました (${lectures.value.lectures.length}件)`);
+};
+
+const scrapeAndSaveForElement = async (item: Faculty | Department): Promise<void> => {
+  const facultyName = item.name.replace(/[/\\?%*:|"<>]/g, "_");
+
+  // 1. カテゴリー一覧ページのDOMを取得
+  const cDom = await fetchSyllabusDom(item.url);
+  if (!cDom.ok) {
+    await writeErrorLog(cDom.error, `fetchSyllabusDom: ${item.name} (${item.url})`);
+    return;
+  }
+
+  // 2. カテゴリー一覧を解析
+  const categories = getCourseCategories(cDom.value, item.url);
+  if (!categories.ok) {
+    await writeErrorLog(categories.error, `getCourseCategories: ${item.name}`);
+    return;
+  }
+
+  // 3. 学部名フォルダの中の categories フォルダに保存
+  const categoryFileName = `${facultyName}/categories/2_categories_${facultyName}.json`;
+  await saveJson(categoryFileName, categories.value);
+  console.log(`  └ ${item.name} のカテゴリーを保存しました (${categories.value.courseCategories.length}件)`);
+
+  // 各カテゴリーの授業一覧を順番に取得
+  for (const category of categories.value.courseCategories) {
+    await scrapeAndSaveLectures(category, facultyName);
+  }
 };
 
 const run = async () => { // 非同期スクレイピング処理のエントリポイントを定義
@@ -75,34 +81,10 @@ const run = async () => { // 非同期スクレイピング処理のエントリ
   // 学部・学科情報をJSONファイルとして保存
   await saveJson("faculties/1_faculties_and_departments.json", facultiesAndDepartments.value);
 
-  // 最初の学部の講義カテゴリ一覧を取得・解析・保存
-  const target = facultiesAndDepartments.value.faculties[0]; // 最初の学部をターゲットとして選ぶ
-  if (!target) {
-    await writeErrorLog({
-      tag: "ParseError",
-      cause: "学部が存在しません"
-    }, "最初の学部が存在しません");
-    console.error("学部が存在しません");
-    return;
-  }
-  const cDom = await fetchSyllabusDom(target.url); // ターゲット学部のURLからDOMを取得
-  if (!cDom.ok) {
-    await writeErrorLog(cDom.error, `fetchSyllabusDom(${target.url})`);
-    return;
-  }
-
-  const categories = getCourseCategories(cDom.value, target.url); // 学部ページから講義カテゴリ一覧を解析
-  if (!categories.ok) {
-    await writeErrorLog(categories.error, "カテゴリ一覧の解析に失敗しました");
-    return;
-  }
-
-  const fileName = `2_categories_${target.name}.json`.replace(/[/\\?%*:|"<>]/g, "_"); // 学部名をファイル名に含める（不正文字を置換）
-  await saveJson(fileName, categories.value); // カテゴリ一覧をJSONファイルとして保存
   console.log(`学部: ${facultiesAndDepartments.value.faculties.length}件, 学科: ${facultiesAndDepartments.value.departments.length}件 を検出しました。`);
   
   for (const faculty of facultiesAndDepartments.value.faculties) {
-    await scrapeAndSaveForElement(faculty); // 各学部のURLからDOMを取得（ここで更なる解析や保存を行うことも可能）
+    await scrapeAndSaveForElement(faculty); // 各学部のURLからDOMを取得
   }
   console.log("Scraping completed and files saved."); // 完了メッセージを出力
 };
