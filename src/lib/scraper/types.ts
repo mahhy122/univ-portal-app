@@ -41,6 +41,7 @@ export interface Course {
 // Syllabus detail structure
 // シラバス詳細の構造
 export interface SyllabusDetail {
+  url: UrlString;         // 追加：シラバス詳細ページのURL
   code: string;           // 講義コード (SyllabusHtml... の末尾など)
   title: string;          // 授業科目名
   instructor: string;     // 担当教員名

@@ -22,7 +22,7 @@ const scrapeAndSaveSyllabusDetail = async (course: Course, folderPath: string): 
   }
 
   // 2. 詳細内容を解析（scraping-2のロジックを移植したパーサーを使用）
-  const detailResult = getSyllabusDetail(result.value);
+  const detailResult = getSyllabusDetail(result.value, course.url);
   if (!detailResult.ok) {
     await writeErrorLog(detailResult.error, `getSyllabusDetail: ${course.name}`);
     return;
