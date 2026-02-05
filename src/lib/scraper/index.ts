@@ -40,37 +40,28 @@ const scrapeAndSaveSyllabusDetail = async (course: Course, folderPath: string): 
  * 授業一覧をスクレイピングし、さらに詳細ページへドリルダウンする関数
  */
 const scrapeAndSaveLectures = async (category: CourseCategory, facultyName: string): Promise<void> => {
-  // 1. 授業一覧ページのDOMを取得
-  const lDom = await fetchSyllabusDom(category.url);
-  if (!lDom.ok) {
-    await writeErrorLog(lDom.error, `fetchSyllabusDom (Lectures): ${category.name}`);
+  const result = await fetchSyllabusDom(category.url);
+  if (!result.ok) {
+    await writeErrorLog(result.error, `fetchSyllabusDom: ${category.name}`);
     return;
   }
 
-  // 2. 授業一覧を解析
-  const lectures = getLectures(lDom.value, category.url);
+  const lectures = getLectures(result.value, category.url);
   if (!lectures.ok) {
+    // 0件エラーなどがログに詳細に書き出される
     await writeErrorLog(lectures.error, `getLectures: ${category.name}`);
     return;
   }
 
-  // --- 階層構造の再現ロジック ---
+  // 階層パスの構築
   const safeFacultyName = facultyName.replace(/[/\\?%*:|"<>]/g, "_");
-  // category.path（["全学共通科目", "自主自律支援科目"]など）をスラッシュで繋いでパス化
-  const hierarchyPath = category.path.map(p => p.replace(/[/\\?%*:|"<>]/g, "_")).join('/');
-  const folderPath = `${safeFacultyName}/${hierarchyPath}`;
-
-  // 3. 授業一覧(リスト)を保存
-  const listFileName = `${folderPath}/3_lectures_${category.name.replace(/[/\\?%*:|"<>]/g, "_")}.json`;
-  await saveJson(listFileName, lectures.value);
-  console.log(`    └ ${category.name} のリストを保存 (${lectures.value.lectures.length}件)`);
-
-  // --- 各授業の詳細ページを順番に取得 ---
-  for (const course of lectures.value.lectures) {
-    // サーバーに負荷をかけないよう0.5秒待機（scraping-2のクローラー作法）
-    await new Promise(resolve => setTimeout(resolve, 500));
-    await scrapeAndSaveSyllabusDetail(course, folderPath);
-  }
+  const safePath = category.path.map(p => p.replace(/[/\\?%*:|"<>]/g, "_")).join("/");
+  const folderPath = `${safeFacultyName}/${safePath}`;
+  
+  const fileName = `${folderPath}/3_lectures_${category.name.replace(/[/\\?%*:|"<>]/g, "_")}.json`;
+  
+  await saveJson(fileName, lectures.value);
+  console.log(`    └ ${category.name} を保存しました (${lectures.value.lectures.length}件)`);
 };
 
 const scrapeAndSaveForElement = async (item: Faculty | Department): Promise<void> => {
