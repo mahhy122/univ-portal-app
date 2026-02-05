@@ -24,7 +24,7 @@ const scrapeAndSaveForElement = async (item: Faculty | Department): Promise<void
 
   // 3. 個別のJSONファイルとして保存
   // ファイル名に使用できない文字を置換し、個別に保存します
-  const fileName = `2_categories_${item.name}.json`.replace(/[/\\?%*:|"<>]/g, "_");
+  const fileName = `categories/2_categories_${item.name.replace(/[/\\?%*:|"<>]/g, "_")}.json`;
   await saveJson(fileName, categories.value);
   console.log(`  └ ${item.name} のカテゴリーを保存しました (${categories.value.courseCategories.length}件)`);
 };
@@ -46,7 +46,7 @@ const run = async () => { // 非同期スクレイピング処理のエントリ
   }
   
   // 学部・学科情報をJSONファイルとして保存
-  await saveJson("1_faculties_and_departments.json", facultiesAndDepartments.value);
+  await saveJson("faculties/1_faculties_and_departments.json", facultiesAndDepartments.value);
 
   // 最初の学部の講義カテゴリ一覧を取得・解析・保存
   const target = facultiesAndDepartments.value.faculties[0]; // 最初の学部をターゲットとして選ぶ
