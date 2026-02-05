@@ -41,8 +41,15 @@ export interface Course {
 // Syllabus detail structure
 // シラバス詳細の構造
 export interface SyllabusDetail {
-  title: string;
-  instructor: string;
-  semester: string;
-  credits: number;
+  code: string;           // 講義コード (SyllabusHtml... の末尾など)
+  title: string;          // 授業科目名
+  instructor: string;     // 担当教員名
+  semester: string;       // 開講期
+  credits: number;        // 単位（数値として扱う）
+  targetYear: string;     // 対象学年
+  objectives: string;     // 授業の狙い・概要
+  plan: string[];         // 授業計画（配列として保持）
+  evaluation: string;     // 成績評価方法
+  textbooks: string;      // 教科書・参考書
+  notes: string;          // 備考
 }
