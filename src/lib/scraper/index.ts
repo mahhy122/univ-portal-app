@@ -3,30 +3,57 @@ import { saveJson } from "./fileWriter"; // JSONファイル保存ユーティ�
 import { writeErrorLog } from "./logger";
 import { getFacultiesAndDepartments} from "./parsers/faculty"; // ページ解析関数群をインポート
 import { getCourseCategories } from "./parsers/category";
+import { getLectures } from "./parsers/lecture";
+import { CourseCategory } from "./types";
 import { UrlString,Faculty, Department } from "./types"; // URL文字列の型をインポート
 
 const BASE_URL = "https://syllabus.u-hyogo.ac.jp/slResult/2025/japanese/" as UrlString; // スクレイピング開始用のベースURLを型アサーションして定義
 const scrapeAndSaveForElement = async (item: Faculty | Department): Promise<void> => {
-  // 1. カテゴリー一覧ページのDOMを取得
   const cDom = await fetchSyllabusDom(item.url);
   if (!cDom.ok) {
     await writeErrorLog(cDom.error, `fetchSyllabusDom: ${item.name} (${item.url})`);
     return;
   }
 
-  // 2. カテゴリー一覧を解析
-  // target.url を baseUrl として渡すことで、相対パス(../)の計算ミスを防ぎます
   const categories = getCourseCategories(cDom.value, item.url);
   if (!categories.ok) {
     await writeErrorLog(categories.error, `getCourseCategories: ${item.name}`);
     return;
   }
 
-  // 3. 個別のJSONファイルとして保存
-  // ファイル名に使用できない文字を置換し、個別に保存します
-  const fileName = `categories/2_categories_${item.name.replace(/[/\\?%*:|"<>]/g, "_")}.json`;
+  const fileName = `categories/2_categories_${item.name}.json`.replace(/[/\\?%*:|"<>]/g, (match) => 
+    match === '/' ? '/' : '_'
+  );
   await saveJson(fileName, categories.value);
   console.log(`  └ ${item.name} のカテゴリーを保存しました (${categories.value.courseCategories.length}件)`);
+
+  // 各カテゴリーの授業一覧を順番に取得
+  for (const category of categories.value.courseCategories) {
+    await scrapeAndSaveLectures(category);
+  }
+};
+
+const scrapeAndSaveLectures = async (category: CourseCategory): Promise<void> => {
+  // 1. 授業一覧ページのDOMを取得
+  const lDom = await fetchSyllabusDom(category.url);
+  if (!lDom.ok) {
+    await writeErrorLog(lDom.error, `fetchSyllabusDom (Lectures): ${category.name}`);
+    return;
+  }
+
+  // 2. 授業一覧を解析（baseUrlとしてcategory.urlを渡す）
+  const lectures = getLectures(lDom.value, category.url);
+  if (!lectures.ok) {
+    await writeErrorLog(lectures.error, `getLectures: ${category.name}`);
+    return;
+  }
+
+  // 3. lectures フォルダに保存
+  const fileName = `lectures/3_lectures_${category.name}.json`.replace(/[/\\?%*:|"<>]/g, (match) => 
+    match === '/' ? '/' : '_'
+  );
+  await saveJson(fileName, lectures.value);
+  console.log(`    └ ${category.name} の授業一覧を保存しました (${lectures.value.lectures.length}件)`);
 };
 
 const run = async () => { // 非同期スクレイピング処理のエントリポイントを定義
