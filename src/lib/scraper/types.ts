@@ -30,6 +30,7 @@ export interface Department {
 export interface CourseCategory {
   name: string;
   url: UrlString;
+  path: string[];
 }
 // Course structure
 // コースの構造
