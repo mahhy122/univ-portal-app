@@ -7,46 +7,39 @@ export const getCourseCategories = (
   baseUrl: string
 ): Result<{courseCategories :CourseCategory[]}, ScraperError> => {
   const categories: CourseCategory[] = [];
-  let currentLevel1 = ""; // 【全学共通科目】など
-  let currentLevel2 = ""; // 《自主自律支援科目》など
+  let currentLevel1 = ""; // 大分類（【全学共通科目】など）
+  let currentLevel2 = ""; // 中分類（《自主自律支援科目》など）
 
-  // page-body内の index_ で始まるクラスを持つdivをすべて取得
-  const divs = doc.querySelectorAll(".page-body div[class^='index_']");
+  // ページ内のすべてのカテゴリ要素を取得
+  const allElements = doc.querySelectorAll(".kamokuLevel1, .kamokuLevel2, .kamokuLevel3");
 
-  divs.forEach(div => {
-    const level1El = div.querySelector(".kamokuLevel1");
-    const level2El = div.querySelector(".kamokuLevel2");
-    const level3El = div.querySelector(".kamokuLevel3");
+  allElements.forEach(el => {
+    const text = el.textContent?.trim() || "";
+    // 記号（|――――や括弧）を除去
+    const cleanName = text.replace(/^\|?―+/, "").replace(/[【】《》＜＞]/g, "").trim();
 
-    if (level1El) {
-      // 大分類の更新（記号や装飾を削除）
-      currentLevel1 = level1El.textContent?.trim().replace(/^\|?―+/, "").replace(/[【】]/g, "").trim() || "";
-      currentLevel2 = ""; // 大分類が変わったら中分類はリセット
-    } else if (level2El) {
-      // 中分類の更新
-      currentLevel2 = level2El.textContent?.trim().replace(/^\|?―+/, "").replace(/[《》]/g, "").trim() || "";
-    } else if (level3El && level3El.tagName === "A") {
-      // リンク（小分類）の取得
-      const anchor = level3El as HTMLAnchorElement;
-      const urlResult = extractValidUrl(anchor, baseUrl);
-      const name = anchor.textContent?.trim()
-        .replace(/^\|?―+/, "")
-        .replace(/[＜＞]/g, "")
-        .replace(/（\d+授業）$/, "") // 「（12授業）」などの末尾の文字を削除
-        .trim();
-
-      if (urlResult.ok && name) {
+    if (el.classList.contains("kamokuLevel1")) {
+      currentLevel1 = cleanName;
+      currentLevel2 = ""; // 大分類が変わったら中分類リセット
+    } else if (el.classList.contains("kamokuLevel2")) {
+      currentLevel2 = cleanName;
+    } else if (el.classList.contains("kamokuLevel3") && el.tagName === "A") {
+      const urlResult = extractValidUrl(el as Element, baseUrl);
+      if (urlResult.ok) {
         categories.push({
-          name,
+          name: cleanName.replace(/（\d+授業）$/, ""), // 「（1授業）」などの件数表示を削除
           url: urlResult.value,
-          path: [currentLevel1, currentLevel2].filter(p => p !== "") // 空文字を除いてパスを構築
+          path: [currentLevel1, currentLevel2].filter(p => p !== "") // 空でない階層をパスに設定
         });
       }
     }
   });
 
   if (categories.length === 0) {
-    return failure({ tag: "DomNotFoundError", cause: "カテゴリーが見つかりません" });
+    return failure({
+      tag: "DomNotFoundError",
+      cause: "カテゴリーが見つかりませんでした。セレクタ .kamokuLevelX が正しいか確認してください。"
+    });
   }
 
   return success({ courseCategories: categories });
