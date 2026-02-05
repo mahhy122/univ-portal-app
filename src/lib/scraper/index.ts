@@ -27,11 +27,14 @@ const scrapeAndSaveLectures = async (category: CourseCategory, facultyName: stri
 
   // 3. lectures フォルダに保存
   // パス形式: 学部名/lectures/3_lectures_カテゴリ名.json
+  const safePath = category.path.map(p => p.replace(/[/\\?%*:|"<>]/g, "_"));
   const safeFacultyName = facultyName.replace(/[/\\?%*:|"<>]/g, "_");
-  const fileName = `${safeFacultyName}/lectures/3_lectures_${category.name.replace(/[/\\?%*:|"<>]/g, "_")}.json`;
+  const safeFileName = `3_lectures_${category.name.replace(/[/\\?%*:|"<>]/g, "_")}.json`;
+  
+  const fileName = `${safeFacultyName}/${safePath.join('/')}/${safeFileName}`;
   
   await saveJson(fileName, lectures.value);
-  console.log(`    └ ${category.name} の授業一覧を保存しました (${lectures.value.lectures.length}件)`);
+  console.log(`    └ ${category.name} を保存: ${category.path.join(' > ')}`);
 };
 
 const scrapeAndSaveForElement = async (item: Faculty | Department): Promise<void> => {
