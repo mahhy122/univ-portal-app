@@ -67,6 +67,7 @@ export const getCourseCategories = (doc: Document, baseUrl: string): Result<Cour
     return {
       name: anchor.textContent?.trim() ?? "名称不明", // カテゴリ名を取得、なければ代替テキスト
       url: new URL(anchor.href, baseUrl).toString() as UrlString, // 絶対URLに変換して格納
+      path: [], // パス配列を初期化
     };
   }));
 };
@@ -92,6 +93,13 @@ export const parseSyllabusDetail = (doc: Document): Result<SyllabusDetail, Scrap
     title, // 取得したタイトルを設定
     instructor: doc.querySelector(".instructor-name")?.textContent?.trim() ?? "未定義", // 担当教員名を取得、なければ既定値
     semester: "2025年度", // 固定で学期情報を設定（必要なら動的取得に変更可）
-    credits: 2 // 固定で単位数を設定（必要に応じて解析ロジックを追加）
+    credits: 2, // 固定で単位数を設定（必要に応じて解析ロジックを追加）
+    url: "" as UrlString, // URLプロパティを追加
+    targetFaculty: "", // 対象学部プロパティを追加
+    objectives: "", // 目的プロパティを追加
+    plan: [], // 計画プロパティを追加
+    evaluation: "", // 評価プロパティを追加
+    textbooks: "", // 教科書プロパティを追加
+    notes: "" // 備考プロパティを追加
   });
 };

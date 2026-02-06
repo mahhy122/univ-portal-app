@@ -11,11 +11,11 @@ export const getSyllabusDetail = (doc: Document, url: UrlString): Result<Syllabu
 
     const detail: SyllabusDetail = {
       url,
-      title: doc.querySelector(".headTitle span")?.textContent?.trim() || "不明",
+      title: findValue("授業科目名"),
       instructor: findValue("担当教員"),
       semester: findValue("開講時期"),
       credits: parseInt(findValue("単位")) || 0,
-      targetFaculty: findValue("対象学部"),
+      targetFaculty: findValue("対象学生"),
       objectives: findValue("授業の狙い・概要"),
       plan: findValue("講義内容・授業計画").split('\n').filter(line => line.trim() !== ""),
       evaluation: findValue("成績評価の基準・方法"),
