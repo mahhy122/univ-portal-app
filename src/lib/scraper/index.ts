@@ -9,6 +9,8 @@ import { CourseCategory, Course, Faculty, Department, UrlString } from "./types"
 
 const BASE_URL = "https://syllabus.u-hyogo.ac.jp/slResult/2025/japanese/" as UrlString;
 
+const processedUrls = new Set<string>();
+
 /**
  * 4. 最深部：個別の授業詳細を解析して保存
  */
@@ -38,55 +40,53 @@ const scrapeAndSaveSyllabusDetail = async (course: Course, folderPath: string): 
  * 3. 授業一覧を取得し、各詳細ページへドリルダウン
  */
 const scrapeAndSaveLectures = async (category: CourseCategory, facultyName: string): Promise<void> => {
-  const result = await fetchSyllabusDom(category.url);
-  if (!result.ok) {
-    await writeErrorLog(result.error, `一覧取得失敗: ${category.name}`);
+  // --- アルゴリズム：URLベースの重複排除 ---
+  if (processedUrls.has(category.url)) {
+    console.log(`    [-] スキップ（取得済み）: ${category.name}`);
     return;
   }
+  processedUrls.add(category.url);
+
+  const result = await fetchSyllabusDom(category.url);
+  if (!result.ok) return;
 
   const lecturesResult = getLectures(result.value, category.url);
-  if (!lecturesResult.ok) {
-    await writeErrorLog(lecturesResult.error, `一覧解析失敗: ${category.name}`);
-    return;
-  }
+  if (!lecturesResult.ok) return;
 
-  // フォルダ階層の組み立て
+  // --- アルゴリズム：フォルダ階層の完全分離 ---
   const safeFaculty = facultyName.replace(/[/\\?%*:|"<>]/g, "_");
   const safeHierarchy = category.path.map(p => p.replace(/[/\\?%*:|"<>]/g, "_")).join("/");
-  const folderPath = `${safeFaculty}/${safeHierarchy}`;
+  const safeCategory = category.name.replace(/[/\\?%*:|"<>]/g, "_");
+  
+  // フォルダパスにカテゴリー名も含めることで、details フォルダが重複しないようにする
+  const folderPath = `${safeFaculty}/${safeHierarchy}/${safeCategory}`;
 
-  // 授業リスト(JSON)の保存
-  const listFileName = `${folderPath}/3_lectures_${category.name.replace(/[/\\?%*:|"<>]/g, "_")}.json`;
+  // 授業リストの保存
+  const listFileName = `${folderPath}/3_lectures_${safeCategory}.json`;
   await saveJson(listFileName, lecturesResult.value);
-  console.log(`    └ ${category.name} のリストを保存 (${lecturesResult.value.lectures.length}件)`);
+  console.log(`    └ ${category.name} を保存 (${lecturesResult.value.lectures.length}件)`);
 
-  // 各授業の詳細を順番に回るわよ
   for (const course of lecturesResult.value.lectures) {
-    // サーバーに優しく、0.5秒待機
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve,0.0001)); // 軽微なディレイを挟む
     await scrapeAndSaveSyllabusDetail(course, folderPath);
   }
 };
-
 /**
  * 2. カテゴリー階層（大分類・中分類）を解析
  */
 const scrapeAndSaveForElement = async (item: Faculty | Department): Promise<void> => {
-  const result = await fetchSyllabusDom(item.url);
-  if (!result.ok) {
-    await writeErrorLog(result.error, `カテゴリ取得失敗: ${item.name}`);
-    return;
-  }
+  // item.name には「工学部 電気電子情報工学科 電気工学コース」といった詳細な名前が入っているはず
+  const elementFolderName = item.name.replace(/[/\\?%*:|"<>]/g, "_");
 
-  const categories = getCourseCategories(result.value, item.url);
-  if (!categories.ok) {
-    await writeErrorLog(categories.error, `カテゴリ解析失敗: ${item.name}`);
-    return;
-  }
+  const cDom = await fetchSyllabusDom(item.url);
+  if (!cDom.ok) return;
 
-  // 各カテゴリーをループして授業一覧へ
+  const categories = getCourseCategories(cDom.value, item.url);
+  if (!categories.ok) return;
+
   for (const category of categories.value.courseCategories) {
-    await scrapeAndSaveLectures(category, item.name);
+    // 学科・コース名を「親」として渡すことで、フォルダを物理的に分ける
+    await scrapeAndSaveLectures(category, elementFolderName);
   }
 };
 
